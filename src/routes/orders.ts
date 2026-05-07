@@ -4,6 +4,8 @@ import { OrderStatus } from '../models/order';
 
 const router = Router();
 
+const INVENTORY_BASE = 'http://localhost:5000/api/products';
+
 const VALID_STATUSES: OrderStatus[] = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
 
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -31,6 +33,7 @@ function rowToItem(row: Record<string, unknown>) {
     id: row['id'],
     orderId: row['orderId'],
     productName: row['productName'],
+    sku: row['sku'],
     quantity: row['quantity'],
     unitPrice: row['unitPrice'],
   };
@@ -86,7 +89,7 @@ router.get('/:id', (req: Request, res: Response) => {
 });
 
 // POST /api/orders
-router.post('/', (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const { customerName, customerEmail, items } = req.body;
   const errors: string[] = [];
 
@@ -108,6 +111,9 @@ router.post('/', (req: Request, res: Response) => {
       if (!it['productName'] || typeof it['productName'] !== 'string' || (it['productName'] as string).trim() === '') {
         errors.push(`items[${i}].productName is required and must be a non-empty string`);
       }
+      if (!it['sku'] || typeof it['sku'] !== 'string' || (it['sku'] as string).trim() === '') {
+        errors.push(`items[${i}].sku is required and must be a non-empty string`);
+      }
       if (!Number.isInteger(it['quantity']) || (it['quantity'] as number) <= 0) {
         errors.push(`items[${i}].quantity must be an integer greater than 0`);
       }
@@ -122,7 +128,39 @@ router.post('/', (req: Request, res: Response) => {
     return;
   }
 
-  const totalAmount = (items as Record<string, unknown>[]).reduce(
+  const validatedItems = items as Record<string, unknown>[];
+
+  // Check stock availability for all items before touching the DB
+  const stockErrors: string[] = [];
+  try {
+    for (const item of validatedItems) {
+      const sku = (item['sku'] as string).trim();
+      const qty = item['quantity'] as number;
+      const resp = await fetch(`${INVENTORY_BASE}/${encodeURIComponent(sku)}`);
+      if (resp.status === 404) {
+        stockErrors.push(`SKU '${sku}' not found in inventory`);
+        continue;
+      }
+      if (!resp.ok) {
+        stockErrors.push(`Inventory error for SKU '${sku}'`);
+        continue;
+      }
+      const product = await resp.json() as { current_stock: number };
+      if (product.current_stock < qty) {
+        stockErrors.push(`Insufficient stock for '${sku}': requested ${qty}, available ${product.current_stock}`);
+      }
+    }
+  } catch (_) {
+    res.status(503).json({ error: 'Inventory service unavailable' });
+    return;
+  }
+
+  if (stockErrors.length > 0) {
+    res.status(400).json({ error: 'Inventory check failed', details: stockErrors });
+    return;
+  }
+
+  const totalAmount = validatedItems.reduce(
     (sum, item) => sum + (item['quantity'] as number) * (item['unitPrice'] as number),
     0
   );
@@ -138,11 +176,30 @@ router.post('/', (req: Request, res: Response) => {
   const idRows = queryRows('SELECT last_insert_rowid() as id');
   const orderId = idRows[0]['id'] as number;
 
-  for (const item of items as Record<string, unknown>[]) {
+  for (const item of validatedItems) {
     db.run(
-      'INSERT INTO order_items (orderId, productName, quantity, unitPrice) VALUES (?, ?, ?, ?)',
-      [orderId, (item['productName'] as string).trim(), item['quantity'], item['unitPrice']]
+      'INSERT INTO order_items (orderId, productName, sku, quantity, unitPrice) VALUES (?, ?, ?, ?, ?)',
+      [orderId, (item['productName'] as string).trim(), (item['sku'] as string).trim(), item['quantity'], item['unitPrice']]
     );
+  }
+
+  // Deduct stock; if this fails, roll back the in-memory DB insert (don't call saveDb)
+  try {
+    for (const item of validatedItems) {
+      const sku = (item['sku'] as string).trim();
+      const qty = item['quantity'] as number;
+      const resp = await fetch(`${INVENTORY_BASE}/${encodeURIComponent(sku)}/stock`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adjustment: -qty, reason: `Reserved for Order #${orderId}` }),
+      });
+      if (!resp.ok) throw new Error(`Stock deduction failed for '${sku}'`);
+    }
+  } catch (_) {
+    db.run('DELETE FROM order_items WHERE orderId = ?', [orderId]);
+    db.run('DELETE FROM orders WHERE id = ?', [orderId]);
+    res.status(503).json({ error: 'Inventory service unavailable' });
+    return;
   }
 
   saveDb();
@@ -155,7 +212,7 @@ router.post('/', (req: Request, res: Response) => {
 });
 
 // PATCH /api/orders/:id
-router.patch('/:id', (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   const id = Number(req.params.id);
   const orderRows = queryRows('SELECT * FROM orders WHERE id = ?', [id]);
 
@@ -191,6 +248,26 @@ router.patch('/:id', (req: Request, res: Response) => {
   if (errors.length > 0) {
     res.status(400).json({ error: 'Validation failed', details: errors });
     return;
+  }
+
+  // Restore stock when cancelling an order
+  if (status === 'cancelled') {
+    const itemRows = queryRows('SELECT * FROM order_items WHERE orderId = ?', [id]);
+    try {
+      for (const itemRow of itemRows) {
+        const sku = itemRow['sku'] as string;
+        const qty = itemRow['quantity'] as number;
+        const resp = await fetch(`${INVENTORY_BASE}/${encodeURIComponent(sku)}/stock`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adjustment: qty, reason: `Cancelled Order #${id}` }),
+        });
+        if (!resp.ok) throw new Error(`Stock restore failed for '${sku}'`);
+      }
+    } catch (_) {
+      res.status(503).json({ error: 'Inventory service unavailable' });
+      return;
+    }
   }
 
   const newStatus = status !== undefined ? (status as string) : current.status;

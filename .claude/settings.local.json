@@ -9,7 +9,10 @@
       "Bash(npm uninstall *)",
       "Bash(timeout 8 npx tsx src/index.ts)",
       "Bash(curl -s http://localhost:3000/)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\alber\\\\Desktop\\\\claude_learning\" -Recurse -File | Select-Object FullName | Where-Object { $_.FullName -notmatch 'node_modules' })",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\alber\\\\Desktop\\\\claude_learning\\\\inventory-dashboard\" -Recurse -File | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object FullName)",
+      "PowerShell(\\(Get-Item \"C:\\\\Users\\\\alber\\\\Desktop\\\\claude_learning\\\\js-learning\\\\order-api\\\\orders.db\"\\).LastWriteTime; \\(Get-Item \"C:\\\\Users\\\\alber\\\\Desktop\\\\claude_learning\\\\js-learning\\\\order-api\\\\src\\\\seed.ts\"\\).LastWriteTime)"
     ]
   }
 }

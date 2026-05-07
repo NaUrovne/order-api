@@ -5,7 +5,7 @@ interface SeedOrder {
   customerName: string;
   customerEmail: string;
   status: OrderStatus;
-  items: { productName: string; quantity: number; unitPrice: number }[];
+  items: { productName: string; sku: string; quantity: number; unitPrice: number }[];
 }
 
 const seedData: SeedOrder[] = [
@@ -14,8 +14,8 @@ const seedData: SeedOrder[] = [
     customerEmail: 'alice@example.com',
     status: 'pending',
     items: [
-      { productName: 'Wireless Headphones', quantity: 1, unitPrice: 89.99 },
-      { productName: 'USB-C Cable', quantity: 2, unitPrice: 12.99 },
+      { productName: 'Wireless Keyboard', sku: 'ELEC-002', quantity: 1, unitPrice: 89.99 },
+      { productName: 'USB-C Charging Cable 1m', sku: 'ELEC-001', quantity: 2, unitPrice: 12.99 },
     ],
   },
   {
@@ -23,9 +23,9 @@ const seedData: SeedOrder[] = [
     customerEmail: 'bob@example.com',
     status: 'pending',
     items: [
-      { productName: 'Mechanical Keyboard', quantity: 1, unitPrice: 149.99 },
-      { productName: 'Mouse Pad XL', quantity: 1, unitPrice: 24.99 },
-      { productName: 'HDMI Cable 2m', quantity: 2, unitPrice: 9.99 },
+      { productName: 'Wireless Mouse', sku: 'ELEC-003', quantity: 1, unitPrice: 34.99 },
+      { productName: 'USB Hub 4-Port', sku: 'ELEC-006', quantity: 1, unitPrice: 24.99 },
+      { productName: 'HDMI Cable 2m', sku: 'ELEC-005', quantity: 2, unitPrice: 9.99 },
     ],
   },
   {
@@ -33,8 +33,8 @@ const seedData: SeedOrder[] = [
     customerEmail: 'carol@example.com',
     status: 'confirmed',
     items: [
-      { productName: 'Monitor Stand', quantity: 1, unitPrice: 45.99 },
-      { productName: 'Laptop Stand', quantity: 1, unitPrice: 39.99 },
+      { productName: 'Ergonomic Office Chair', sku: 'FURN-001', quantity: 2, unitPrice: 249.99 },
+      { productName: 'Standing Desk (adjustable)', sku: 'FURN-002', quantity: 1, unitPrice: 449.99 },
     ],
   },
   {
@@ -42,9 +42,9 @@ const seedData: SeedOrder[] = [
     customerEmail: 'david@example.com',
     status: 'shipped',
     items: [
-      { productName: 'HD Webcam', quantity: 1, unitPrice: 79.99 },
-      { productName: 'Ring Light', quantity: 1, unitPrice: 35.99 },
-      { productName: 'USB Microphone', quantity: 1, unitPrice: 49.99 },
+      { productName: 'Disinfectant Wipes (canister)', sku: 'CLEN-005', quantity: 4, unitPrice: 8.99 },
+      { productName: 'All-Purpose Cleaner (5L)', sku: 'CLEN-001', quantity: 2, unitPrice: 15.99 },
+      { productName: 'Paper Towels (case of 12)', sku: 'CLEN-002', quantity: 3, unitPrice: 24.99 },
     ],
   },
   {
@@ -52,9 +52,9 @@ const seedData: SeedOrder[] = [
     customerEmail: 'eve@example.com',
     status: 'delivered',
     items: [
-      { productName: 'Standing Desk Mat', quantity: 1, unitPrice: 55.99 },
-      { productName: 'Ergonomic Cushion', quantity: 1, unitPrice: 42.99 },
-      { productName: 'Cable Management Box', quantity: 1, unitPrice: 19.99 },
+      { productName: 'A4 Copy Paper (ream)', sku: 'OFFC-001', quantity: 5, unitPrice: 8.99 },
+      { productName: 'Ballpoint Pens (box of 12)', sku: 'OFFC-002', quantity: 2, unitPrice: 7.99 },
+      { productName: 'Sticky Notes 3x3', sku: 'OFFC-003', quantity: 3, unitPrice: 4.99 },
     ],
   },
 ];
@@ -87,9 +87,9 @@ async function seed() {
 
     for (const item of order.items) {
       db.run(
-        `INSERT INTO order_items (orderId, productName, quantity, unitPrice)
-         VALUES (?, ?, ?, ?)`,
-        [orderId, item.productName, item.quantity, item.unitPrice]
+        `INSERT INTO order_items (orderId, productName, sku, quantity, unitPrice)
+         VALUES (?, ?, ?, ?, ?)`,
+        [orderId, item.productName, item.sku, item.quantity, item.unitPrice]
       );
     }
 

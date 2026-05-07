@@ -33,11 +33,18 @@ export async function initDb(): Promise<Database> {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       orderId INTEGER NOT NULL,
       productName TEXT NOT NULL,
+      sku TEXT NOT NULL,
       quantity INTEGER NOT NULL CHECK (quantity > 0),
       unitPrice REAL NOT NULL CHECK (unitPrice > 0),
       FOREIGN KEY (orderId) REFERENCES orders(id)
     )
   `);
+
+  try {
+    db.run("ALTER TABLE order_items ADD COLUMN sku TEXT NOT NULL DEFAULT ''");
+  } catch (_) {
+    // column already exists
+  }
 
   saveDb();
   return db;
